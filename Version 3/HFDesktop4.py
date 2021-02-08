@@ -1,15 +1,15 @@
 # region-imports
-from PyQt5 import QtCore, QtGui, QtWidgets, QtWebEngineWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets, QtWebEngineWidgets, QtWebEngineCore
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtWebEngineWidgets import *
+from PyQt5.QtWebEngineCore import *
 
 from bs4 import BeautifulSoup
 from zipfile import ZipFile
 import sys
 import concurrent.futures
-import threading
 import requests
 import urllib
 import os
@@ -19,7 +19,7 @@ import time
 import pyperclip
 import sqlite3
 import re
-import subprocess
+from datetime import datetime
 #endregion
 # region---Global-Setup--------------
 conn = sqlite3.connect("Data.db")
@@ -40,7 +40,8 @@ item_list = {}
 result_view_list = []
 tag_info_setting = 0
 not_in_database = []
-_version_ = "v.3.2"
+_version_ = "v.3.3_dev"
+hitomi_extention = False
 #endregion
 # region---Define-Converter----------
 def type_converter(type):
@@ -66,11 +67,16 @@ def create_itemlist(feature, up_down):
             item_list[type].append(tu[0])
 #endregion
 # region---get-latest-gallery--------
-web = requests.get("https://hentaifox.com/")
-html = web.text
-soup = BeautifulSoup(html, "html.parser")
-no1 = str(soup.find("div", attrs={"class": "inner_thumb"}))
-latest_gallery = int(no1[no1.find("/gallery/") + 9:no1.find('/"><img')])
+try:
+    print("connecting to Hentaifox.com")
+    web = requests.get("https://hentaifox.com/")
+    html = web.text
+    soup = BeautifulSoup(html, "html.parser")
+    no1 = str(soup.find("div", attrs={"class": "inner_thumb"}))
+    latest_gallery = int(no1[no1.find("/gallery/") + 9:no1.find('/"><img')])
+    offline = False
+except:
+    offline = True
 #endregion
 # region fonts
 font10 = QtGui.QFont()
@@ -120,6 +126,7 @@ class Credentials_dialog(QDialog):
         self.lineEdit_Pw = QLineEdit(self)
         self.lineEdit_Pw.setObjectName(u"lineEdit_Pw")
         self.lineEdit_Pw.setGeometry(QRect(20, 150, 461, 41))
+        self.lineEdit_Pw.setEchoMode(QLineEdit.Password)
         self.label_info = QLabel(self)
         self.label_info.setObjectName(u"label_info")
         self.label_info.setFont(font11)
@@ -139,10 +146,7 @@ class Credentials_dialog(QDialog):
         list_of_tuples = loc.fetchall()
         if list_of_tuples != [('', '')]:
             username = list_of_tuples[0][0]
-            password = list_of_tuples[0][1]
             self.lineEdit_U.setPlaceholderText(username)
-            self.lineEdit_Pw.setPlaceholderText(password)
-
 
         self.save_button.clicked.connect(self.update_credentials)
 
@@ -196,7 +200,7 @@ class DownloadThread(QThread):
         id = data[0]
         title = data[1].replace("|","\n")
         filename = data[1].replace("|", "_").replace(".", "").replace(":", "-").replace('"',"'").replace("<","[").replace(">","]").replace("?","").replace("/","_").replace("*","·")
-        foldername =filename.replace(" ","_")
+        foldername = filename.replace(" ","_")
         pages = data[2]
         dir = data[3]
         eh_id = data[4]
@@ -305,7 +309,6 @@ class Ui_Download(QDialog):
         msg.exec_()
         self.done(0)
 
-
 #endregion
 # region---GUI-----------------------
 class Ui_HentaiFoxDesktop(QMainWindow):
@@ -380,6 +383,7 @@ class Ui_HentaiFoxDesktop(QMainWindow):
         self.urlbar.setSizePolicy(size_policy)
         self.urlbar.setFont(font10)
         self.urlbar.setObjectName("urlbar")
+        self.urlbar.setClearButtonEnabled(True)
         self.horizontalLayout.addWidget(self.urlbar)
         self.bookmark = QtWidgets.QToolButton(self.browse)
         icon4 = QtGui.QIcon()
@@ -391,10 +395,11 @@ class Ui_HentaiFoxDesktop(QMainWindow):
         self.bookmark.setAutoRaise(True)
         self.bookmark.setObjectName("toolButton")
         self.horizontalLayout.addWidget(self.bookmark)
-        self.downloadbutton = QtWidgets.QPushButton(self.browse)
+
+        self.downloadbutton = QPushButton(self.browse)
         self.downloadbutton.setFont(font11)
-        self.downloadbutton.setObjectName("downloadbutton")
-        self.horizontalLayout.addWidget(self.downloadbutton)
+        self.downloadbutton.hide()
+
         self.label_zoom = QtWidgets.QLabel(self.browse)
         self.label_zoom.setFont(font13)
         self.label_zoom.setObjectName("label_zoom")
@@ -439,8 +444,9 @@ class Ui_HentaiFoxDesktop(QMainWindow):
         self.verticalLayout_21.setObjectName("verticalLayout_21")
         self.verticalLayout.addWidget(self.tabs)
 
-        # self.info_button = QPushButton(self.browse)
-        # self.info_button.hide()
+        if hitomi_extention == True:
+            self.info_button = QPushButton(self.browse)
+            self.info_button.hide()
 
         self.hover_url = QLabel(self.browse)
         self.hover_url.setStyleSheet("background-color: white")
@@ -478,6 +484,19 @@ class Ui_HentaiFoxDesktop(QMainWindow):
         self.gallery_scraping_overlay.setFrameShape(QFrame.StyledPanel)
         self.gallery_scraping_overlay.setLineWidth(2)
         self.gallery_scraping_overlay.hide()
+
+        self.upvote_btn = QPushButton(self.browse)
+        self.upvote_btn.setIcon(QIcon("icons/thumbs_up.png"))
+        self.upvote_btn.setFont(font15)
+        self.upvote_btn.hide()
+        self.downvote_btn = QPushButton(self.browse)
+        self.downvote_btn.setIcon(QIcon("icons/thumbs_down.png"))
+        self.downvote_btn.setFont(font15)
+        self.downvote_btn.hide()
+        self.fav_btn = QPushButton(self.browse)
+        self.fav_btn.setText("Favorite")
+        self.fav_btn.setFont(font11)
+        self.fav_btn.hide()
 
         self.gridLayout_2.addLayout(self.verticalLayout, 0, 0, 1, 1)
         self.tabWidget.addTab(self.browse, "")
@@ -1127,32 +1146,35 @@ class Ui_HentaiFoxDesktop(QMainWindow):
         QtCore.QMetaObject.connectSlotsByName(HentaiFoxDesktop)
         # endregion
         # region---------browser-setup------------------------------------------
-        self.tabWidget.setCurrentIndex(0)
-        loc.execute("SELECT value FROM settings WHERE setting='login_start_setting'")
-        login_start_setting = int(loc.fetchone()[0])
-        if login_start_setting == 1:
-            self.add_new_tab(QUrl('https://hentaifox.com/login/'), 'Login')
+        if offline == True:
+            self.tabWidget.setTabEnabled(0,False)
         else:
-            self.add_new_tab(QUrl('https://hentaifox.com/'),'Homepage')
-        self.urlbar.setText("https://hentaifox.com/")
-        bookmarks = []
-        self.bookmarkMenu = QMenu()
-        loc.execute("SELECT * FROM bookmarks WHERE true")
-        for tu in loc.fetchall():
-            bookmarks.append(tu)
-        self.bookmarkMenu.clear()
-        self.bookmarkMenu.addAction(QIcon("icons/add_Bookmark.png"), "Add Bookmark", self.add_bookmark,
-                                    QKeySequence("Ctrl+D"))
-        self.bookmarkMenu.addSeparator()
-        self.bookmarkMenu.addAction(QIcon("icons/add_Bookmark.png"), "Add Bookmark", self.add_bookmark,
-                                    QKeySequence("Ctrl+D"))
-        self.bookmarkMenu.addSeparator()
-        for tu in bookmarks:
-            self.bookmarkMenu.addAction(f"{tu[1]}", lambda bookmark_url=tu[0]: self.load_bookmark(bookmark_url))
-        self.refresh_bookmarks()
-        self.bookmark.setMenu(self.bookmarkMenu)
-        self.browserMenu = QMenu()
-        self.create_menu()
+            self.tabWidget.setCurrentIndex(0)
+            loc.execute("SELECT value FROM settings WHERE setting='login_start_setting'")
+            login_start_setting = int(loc.fetchone()[0])
+            if login_start_setting == 1:
+                self.add_new_tab(QUrl('https://hentaifox.com/login/'), 'Login')
+            else:
+                self.add_new_tab(QUrl('https://hentaifox.com/'),'Homepage')
+            self.urlbar.setText("https://hentaifox.com/")
+            bookmarks = []
+            self.bookmarkMenu = QMenu()
+            loc.execute("SELECT * FROM bookmarks WHERE true")
+            for tu in loc.fetchall():
+                bookmarks.append(tu)
+            self.bookmarkMenu.clear()
+            self.bookmarkMenu.addAction(QIcon("icons/add_Bookmark.png"), "Add Bookmark", self.add_bookmark,
+                                        QKeySequence("Ctrl+D"))
+            self.bookmarkMenu.addSeparator()
+            self.bookmarkMenu.addAction(QIcon("icons/add_Bookmark.png"), "Add Bookmark", self.add_bookmark,
+                                        QKeySequence("Ctrl+D"))
+            self.bookmarkMenu.addSeparator()
+            for tu in bookmarks:
+                self.bookmarkMenu.addAction(f"{tu[1]}", lambda bookmark_url=tu[0]: self.load_bookmark(bookmark_url))
+            self.refresh_bookmarks()
+            self.bookmark.setMenu(self.bookmarkMenu)
+            self.browserMenu = QMenu()
+            self.create_menu()
         # endregion
         # region---------multi-search-setup-------------------------------------
         create_itemlist("tag", "ASC")
@@ -1178,10 +1200,14 @@ class Ui_HentaiFoxDesktop(QMainWindow):
         self.tabs.tabBarDoubleClicked.connect(self.tab_open_doubleclick)
         self.tabs.currentChanged.connect(self.current_tab_changed)
         self.tabs.tabCloseRequested.connect(self.close_current_tab)
-        self.zoomslider.sliderMoved.connect(self.zoom_browser)
+        self.zoomslider.valueChanged.connect(self.zoom_browser)
         self.urlbar.returnPressed.connect(self.navigate_to_url)
         self.downloadbutton.clicked.connect(self.download)
-        # self.info_button.clicked.connect(self.find_more_info)
+        self.upvote_btn.clicked.connect(lambda: self.web_interaction("up"))
+        self.downvote_btn.clicked.connect(lambda: self.web_interaction("down"))
+        self.fav_btn.clicked.connect(lambda: self.web_interaction("fav"))
+        if hitomi_extention == True:
+            self.info_button.clicked.connect(self.find_similar_galleries)
         # endregion
         # region---------multi-search-signals-----------------------------------
         self.choosetype.activated.connect(self.update_taglist)
@@ -1206,7 +1232,10 @@ class Ui_HentaiFoxDesktop(QMainWindow):
         self.Sort_Count.clicked.connect(self.count_toggled)
         # endregion
         # region---------update-signals-----------------------------------------
-        self.updatebutton.clicked.connect(self.update_datamap)
+        if offline == True:
+            self.updatebutton.setEnabled(False)
+        else:
+            self.updatebutton.clicked.connect(self.update_datamap)
         # endregion
         # region---------result-signals-----------------------------------------
         self.tabWidget.currentChanged.connect(self.load_result_filelist)
@@ -1236,7 +1265,7 @@ class Ui_HentaiFoxDesktop(QMainWindow):
         HentaiFoxDesktop.setWindowTitle(_translate("HentaiFoxDesktop", "HentaiFox Desktop"))
         self.label_version.setText(
             _translate("HentaiFoxDesktop", f"<html><head/><body><p>HF-Desktop {_version_}</p></body></html>"))
-        self.downloadbutton.setText(_translate("HentaiFoxDesktop", "Download Gallery"))
+        self.downloadbutton.setText(_translate("HentaiFoxDesktop", "Download"))
         self.label_zoom.setText(_translate("HentaiFoxDesktop", "Zoom:"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.browse), _translate("HentaiFoxDesktop", "Browse"))
         self.label.setText(_translate("HentaiFoxDesktop",
@@ -1359,7 +1388,7 @@ class Ui_HentaiFoxDesktop(QMainWindow):
         self.tabs.setCurrentIndex(i)
         browser.urlChanged.connect(lambda qurl, browser=browser: self.update_urlbar(qurl, browser))
         browser.loadFinished.connect(lambda _, browser=browser: self.on_load_finished(browser))
-        browser.loadFinished.connect(lambda _, i=i, browser=browser: self.tabs.setTabText(i, str(str(browser.page().title())[:20]+"...")))
+        browser.loadFinished.connect(lambda _,browser=browser: self.tabs.setTabText(self.tabs.indexOf(browser), str(str(browser.page().title())[:20]+"...")))
         browser.page().linkHovered.connect(lambda url=browser.page().linkHovered: self.link_hovered(url))
 
     def create_new_tab(self, page):
@@ -1371,19 +1400,18 @@ class Ui_HentaiFoxDesktop(QMainWindow):
             self.tabs.setCurrentIndex(i)
         browser.urlChanged.connect(lambda qurl, browser=browser: self.update_urlbar(qurl, browser))
         browser.loadFinished.connect(lambda _, browser=browser: self.on_load_finished(browser))
-        browser.loadFinished.connect(lambda _, i=i, browser=browser: self.tabs.setTabText(i, str(str(browser.page().title())[:20]+"...")))
+        browser.loadFinished.connect(lambda _,browser=browser: self.tabs.setTabText(self.tabs.indexOf(browser), str(str(browser.page().title())[:20]+"...")))
         browser.page().linkHovered.connect(lambda url=browser.page().linkHovered: self.link_hovered(url))
 
     def tab_open_doubleclick(self, i):
         if i == -1:
             self.add_new_tab(qurl=QUrl("https://hentaifox.com/"))
 
-    def current_tab_changed(self, i):
+    def current_tab_changed(self, i) :
         if isinstance(self.tabs.currentWidget(),QWebEngineView) == True:
             #region disable/enable
             self.zoomslider.show()
             self.label_zoom.show()
-            self.downloadbutton.setEnabled(True)
             self.bookmark.setEnabled(True)
             self.backbutton.setEnabled(True)
             self.forwardbutton.setEnabled(True)
@@ -1405,11 +1433,11 @@ class Ui_HentaiFoxDesktop(QMainWindow):
             self.update_zoom()
             self.refresh_bookmarks()
             self.update_tab_count()
+            self.show_overlays(url=qurl.url(),browser=self.tabs.currentWidget())
         elif isinstance(self.tabs.currentWidget(),QWidget) == True:
             #region disable/enable
             self.zoomslider.hide()
             self.label_zoom.hide()
-            self.downloadbutton.setDisabled(True)
             self.bookmark.setDisabled(True)
             self.backbutton.setDisabled(True)
             self.forwardbutton.setDisabled(True)
@@ -1425,12 +1453,15 @@ class Ui_HentaiFoxDesktop(QMainWindow):
             self.browserMenu.download.setDisabled(True)
             self.browserMenu.copypasta.setDisabled(True)
             self.browserMenu.result_file.setEnabled(True)
+            if hitomi_extention == True:
+                self.info_button.hide()
             #endregion
             try:
                 term = self.tabs.currentWidget().term
                 self.urlbar.setText(term)
                 self.urlbar.setCursorPosition(0)
                 self.update_tab_count()
+                self.show_overlays(url="not_hentaifox",browser=self.tabs.currentWidget())
             except:
                 print(self.tabs.currentWidget())
         else:
@@ -1530,10 +1561,10 @@ class Ui_HentaiFoxDesktop(QMainWindow):
                     id_overlay.setText(str(id))
                     id_overlay.adjustSize()
                     #endregion
-                    match = str(re.search(term, title, re.IGNORECASE))
+                    match = str(re.search(re.escape(term), title, re.IGNORECASE))
                     case_term = match[match.find("match")+7:-2]
 
-                    title = "<html><head/><body><p>" + re.sub(f"{term}",f"<span style=\" font-weight:600;\">{case_term}</span>",title,flags=re.IGNORECASE) + "</p></body></html>"
+                    title = "<html><head/><body><p>" + re.sub(re.escape(term.replace("<","&lt;").replace(">","&gt;")),f'<span style=" font-weight:600;">{case_term.replace("<","&lt;").replace(">","&gt;")}</span>',str(title.replace("<","&lt;").replace(">","&gt;")),flags=re.IGNORECASE) + "</p></body></html>"
 
                     layout2 = QVBoxLayout()
                     title_box = QLabel()
@@ -1713,10 +1744,81 @@ class Ui_HentaiFoxDesktop(QMainWindow):
                 list_of_tuples = c.fetchall()
                 self.create_result_tab(list_of_tuples,term)
 
+    def show_overlays(self,url,browser):
+        if self.tabs.currentWidget() == browser:
+            if url.startswith("https://hentaifox.com/gallery/"):
+                p = self.tabs.geometry().topLeft() + QPoint(20,int(self.tabs.geometry().height()/2))
+                self.upvote_btn.adjustSize()
+                self.upvote_btn.move(p+QPoint(0,int(-(self.upvote_btn.geometry().height()/2))))
+                self.upvote_btn.show()
+                self.upvote_btn.raise_()
+                self.downvote_btn.adjustSize()
+                self.downvote_btn.move(p+QPoint(int(self.upvote_btn.geometry().width()+2),int(-(self.downvote_btn.geometry().height()/2))))
+                self.downvote_btn.show()
+                self.downvote_btn.raise_()
+                self.downloadbutton.adjustSize()
+                self.downloadbutton.move(p+QPoint(0,int(self.upvote_btn.geometry().height()/2+2)))
+                self.downloadbutton.show()
+                self.downloadbutton.raise_()
+                self.fav_btn.adjustSize()
+                self.fav_btn.move(p+QPoint(0,int(-(self.upvote_btn.geometry().height()/2+2+self.fav_btn.geometry().height()))))
+                self.fav_btn.show()
+                self.fav_btn.raise_()
+            else:
+                self.upvote_btn.hide()
+                self.downvote_btn.hide()
+                self.downloadbutton.hide()
+                self.fav_btn.hide()
+
+    def web_interaction(self,v):
+        page = self.tabs.currentWidget().page()
+        url = self.tabs.currentWidget().url().url()
+        id = url[30:-1]
+        if v == "up":
+            page.runJavaScript("""
+                document.getElementById("thumbs_up").click()
+            """)
+            loc.execute(f"UPDATE usergalleries SET vote = 1 WHERE id = '{id}'")
+            localdb.commit()
+        elif v == "down":
+            page.runJavaScript("""
+                document.getElementById("thumbs_down").click()
+            """)
+            loc.execute(f"UPDATE usergalleries SET vote = 2 WHERE id = '{id}'")
+            localdb.commit()
+        elif v == "fav":
+            page.runJavaScript("""
+                document.getElementById("add_fav_btn").click()
+            """)
+            loc.execute(f"UPDATE usergalleries SET fav = 1 WHERE id = '{id}'")
+            localdb.commit()
+
+
     def on_load_finished(self,browser):
         url = browser.url().url()
+        page = browser.page()
+        page.runJavaScript(open("script.inject","r").read())
+        self.show_overlays(url,browser)
         if url.startswith("https://hentaifox.com/login"):
-            self.fill_credentials()
+            self.fill_credentials(browser)
+        elif url.startswith("https://hentaifox.com/gallery/"):
+            page.runJavaScript("""
+                document.getElementById("download_btn").style.display = "none"
+                document.getElementById("thumbs_up").style.display = "none"
+                document.getElementById("thumbs_down").style.display = "none"
+                document.getElementById("add_fav_btn").style.display = "none"
+            """)
+            id = url[30:-1]
+            self.history(id)
+
+    def history(self,id):
+        loc.execute(f"SELECT * FROM usergalleries WHERE id = {id}")
+        history_items = loc.fetchall()
+        if len(history_items) < 1:
+            datetime_obj = datetime.now()
+            print(datetime_obj)
+            loc.execute(f"INSERT INTO usergalleries VALUES ('{id}',0,'{datetime_obj}',0,0,0)")
+            localdb.commit()
 
     def update_urlbar(self, q, browser=None):
         if browser != self.tabs.currentWidget():
@@ -1732,47 +1834,65 @@ class Ui_HentaiFoxDesktop(QMainWindow):
                     browser.back()
                 else:
                     self.tabs.removeTab(self.tabs.currentIndex())
-            # elif q.toString().startswith("https://hentaifox.com/gallery/"):
-            #     id = q.toString()[30:-1]
-            #     self.more_information()
-            # else:
-            #     self.info_button.hide()
-            self.tabs.setTabText(self.tabs.currentIndex(), str(str(browser.page().title())[:20]+"..."))
+            elif q.toString().startswith("https://hentaifox.com/gallery/"):
+                id = q.toString()[30:-1]
+                if hitomi_extention == True:
+                    self.similar_galleries()
+                self.show_overlays(url=q.toString(),browser=browser)
+            else:
+                if hitomi_extention == True:
+                    self.info_button.hide()
+            # self.tabs.setTabText(self.tabs.currentIndex(), str(str(browser.page().title())[:20]+"..."))
 
     #region hitomi.la wip
-    # def more_information(self):
-    #     p = self.browse.geometry().bottomLeft() + QPoint(20,-100)
-    #     self.info_button.move(p)
-    #     self.info_button.raise_()
-    #     self.info_button.setText("Find More Information")
-    #     self.info_button.adjustSize()
-    #     self.info_button.show()
-    #
-    # def find_more_info(self):
-    #     url = self.tabs.currentWidget().url().url()
-    #     id = url[30:-1]
-    #     c.execute(f"SELECT * FROM galleryinformation WHERE gal={id}")
-    #     tu = c.fetchone()
-    #     hitomi_title = tu[1].replace(" ","-").replace("'","-").lower()
-    #     if hitomi_title.endswith("-"):
-    #         hitomi_title = hitomi_title[:-1]
-    #     im_url = tu[3]
-    #     im_id = im_url[[m.start() for m in re.finditer("/",im_url)][3]+1:[m.start() for m in re.finditer("/",im_url)][4]]
-    #     c.execute(f"SELECT tag FROM gallerycategories WHERE gal={id}")
-    #     category = c.fetchone()[0]
-    #     hitomi_url = f"https://hitomi.la/{category}/{hitomi_title}-english-{im_id}.html"
-    #     print(hitomi_url)
-    #     web = requests.get(hitomi_url)
-    #     html = web.text
-    #     soup = BeautifulSoup(html, 'html.parser')
-    #     okay = soup.find('title')
-    #     if str(okay) != "<title>404 Not Found</title>":
-    #         test = soup.find("div",attrs={"class":"dj"})
-    #         print(test)
+    if hitomi_extention == True:
+        def similar_galleries(self):
+            p = self.browse.geometry().bottomLeft() + QPoint(20,-100)
+            self.info_button.move(p)
+            self.info_button.raise_()
+            self.info_button.setText("Find similar galleries")
+            self.info_button.adjustSize()
+            self.info_button.show()
+
+        def find_similar_galleries(self):
+            url = self.tabs.currentWidget().url().url()
+            id = url[30:-1]
+            c.execute(f"SELECT * FROM galleryinformation WHERE gal={id}")
+            tu = c.fetchone()
+            hitomi_title = tu[1].replace(" ","-").replace("'","-").replace("?","-").replace("#","-").replace("/","-").replace("<","-").replace(">","-").lower()
+            if hitomi_title.endswith("-"):
+                hitomi_title = hitomi_title[:-1]
+            im_url = tu[3]
+            im_id = im_url[[m.start() for m in re.finditer("/",im_url)][3]+1:[m.start() for m in re.finditer("/",im_url)][4]]
+            c.execute(f"SELECT tag FROM gallerycategories WHERE gal={id}")
+            category = c.fetchone()[0]
+            hitomi_url = f"https://hitomi.la/{category}/{hitomi_title}-english-{im_id}.html"
+            print(f"Information source: {hitomi_url}")
+            web = requests.get(hitomi_url)
+            html = web.text
+            soup = BeautifulSoup(html, 'html.parser')
+            okay = soup.find('title')
+            if str(okay) != "<title>404 Not Found</title>":
+                for entry in soup.find_all("script"):
+                    if entry.text.startswith("var galleryid ="):
+                        list_of_related_im_ids = entry.text[entry.text.find("[")+1:entry.text.find("]")]
+                list_of_galleries = []
+                try:
+                    for im_id in list_of_related_im_ids.split(sep=","):
+                        c.execute(f"SELECT * FROM galleryinformation WHERE cover_url LIKE '%/{im_id}/%'")
+                        gal_id = c.fetchone()
+                        if gal_id != None:
+                            list_of_galleries.append(gal_id)
+                    self.create_result_tab(list_of_galleries,term=f"Related to {tu[1]}")
+                except:
+                    print("Could not find similar galleries on hitomi.la")
+            else:
+                print("Unable to build hitomi.la url.")
+
     #endregion
 
-    def fill_credentials(self):
-        page = self.tabs.currentWidget().page()
+    def fill_credentials(self,browser):
+        page = browser.page()
         if page.url().url().startswith("https://hentaifox.com/login"):                          #doublecheck to prevent bugs
             loc.execute("SELECT value FROM settings WHERE setting='auto_fill_setting'")
             auto_fill_setting = int(loc.fetchone()[0])
@@ -1815,12 +1935,12 @@ class Ui_HentaiFoxDesktop(QMainWindow):
     def download(self):
         if isinstance(self.tabs.currentWidget(),QWebEngineView) == True:
             url = self.tabs.currentWidget().url().url()
-            if url.startswith("https://hentaifox.com/g/"):
-                id = url[[m.start() for m in re.finditer("/",url)][3]+1:[m.start() for m in re.finditer("/",url)][4]]
-            elif url.startswith("https://hentaifox.com/gallery/"):
+            # removed feature for now:
+            # if url.startswith("https://hentaifox.com/g/"):
+            #     id = url[[m.start() for m in re.finditer("/",url)][3]+1:[m.start() for m in re.finditer("/",url)][4]]
+            if url.startswith("https://hentaifox.com/gallery/"):
                 id = url[[m.start() for m in re.finditer("/",url)][3]+1:[m.start() for m in re.finditer("/",url)][4]]
 
-            if url.startswith("https://hentaifox.com/g/") or url.startswith("https://hentaifox.com/gallery/"):
                 c.execute(f"SELECT * FROM galleryinformation WHERE gal='{id}'")
                 tu = c.fetchone()
                 image_url = tu[3]
@@ -1834,6 +1954,9 @@ class Ui_HentaiFoxDesktop(QMainWindow):
                 dwl = Ui_Download(self)
                 dwl.data_(data)
                 _ = dwl.show()
+                loc.execute(f"UPDATE usergalleries SET down = 1 WHERE id = '{id}'")
+                localdb.commit()
+
 
     def add_bookmark(self):
         if isinstance(self.tabs.currentWidget(),QWebEngineView) == True:
@@ -2644,10 +2767,18 @@ class Ui_HentaiFoxDesktop(QMainWindow):
     #endregion
 #endregion
 # region-web-engine
+class RequestInterceptor(QWebEngineUrlRequestInterceptor):
+    def interceptRequest(self, info):
+        url = info.requestUrl().toString()
+        if url.find('go.hentaigold.net') > -1 or url.find("google-analytics.com") > -1 or url.find("whos.amung.us") > -1:
+            # print('block:', url)
+            info.block(True)
+
 class WebEngineView(QWebEngineView):
     def __init__(self, *args, **kwargs):
         QWebEngineView.__init__(self, *args, **kwargs)
         self.tab = self.parent()
+        QWebEngineProfile.defaultProfile().setUrlRequestInterceptor(RequestInterceptor(self))
 
     def createWindow(self, QWebEnginePage_WebWindowType):
         new_webview = WebEngineView(self.tab)
