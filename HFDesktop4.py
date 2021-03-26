@@ -11,7 +11,6 @@ from zipfile import ZipFile
 import sys
 import concurrent.futures
 import requests
-import urllib
 import os
 import shutil
 import json
@@ -20,15 +19,10 @@ import pyperclip
 import sqlite3
 import re
 from datetime import datetime
-#endregion
+# endregion
 # region---Global-Setup--------------
 conn = sqlite3.connect("Data.db")
 c = conn.cursor()
-
-def db_con():
-    conn = sqlite3.connect("Data.db")
-    c = conn.cursor()
-db_con()
 
 localdb = sqlite3.connect("Local.db")
 loc = localdb.cursor()
@@ -42,7 +36,7 @@ tag_info_setting = 0
 not_in_database = []
 _version_ = "v.3.3_dev"
 hitomi_extention = False
-#endregion
+# endregion
 # region---Define-Converter----------
 def type_converter(type):
     switcher = {
@@ -52,9 +46,9 @@ def type_converter(type):
         "artists":      "artist",
         "groups":       "group",
         "categories":   "category"
-    }
+        }
     return switcher.get(type)
-#endregion
+# endregion
 # region---Define-Itemlist-----------
 def create_itemlist(feature, up_down):
     for type in types:
@@ -65,7 +59,9 @@ def create_itemlist(feature, up_down):
         c.execute(f"SELECT DISTINCT tag FROM {typex}information WHERE true ORDER BY {feature} {up_down}")
         for tu in c.fetchall():
             item_list[type].append(tu[0])
-#endregion
+
+
+# endregion
 # region---get-latest-gallery--------
 try:
     print("connecting to Hentaifox.com")
@@ -77,7 +73,7 @@ try:
     offline = False
 except:
     offline = True
-#endregion
+# endregion
 # region fonts
 font10 = QtGui.QFont()
 font10.setFamily("Arial")
@@ -100,7 +96,7 @@ font30 = QtGui.QFont()
 font30.setFamily("Arial")
 font30.setPointSize(30)
 font30.setWeight(80)
-#endregion
+# endregion
 # region credentials dialoge
 class Credentials_dialog(QDialog):
     def __init__(self, *args, **kwargs):
@@ -2426,22 +2422,22 @@ class Ui_HentaiFoxDesktop(QMainWindow):
         self.opentaginbrowser(abc=current_abc, type=current_type)
 
     def multi_search(self):
-        if self.whitelist.count() > 0:
-            start_time = time.time()
-            filename = ""
-            connection = ""
-            for list_ in white_list.values():
-                for tag in list_:
-                    filename = filename + connection + f"{tag}"
-                    connection = "-"
-            connection = "!"
-            for list_ in black_list.values():
-                for tag in list_:
-                    filename = filename + connection + f"{tag}"
-            filename = filename.replace(" ", "_")
-            whitelist = []
-            blacklist = []
+        start_time = time.time()
+        filename = ""
+        connection = ""
+        for list_ in white_list.values():
+            for tag in list_:
+                filename = filename + connection + f"{tag}"
+                connection = "-"
+        connection = "!"
+        for list_ in black_list.values():
+            for tag in list_:
+                filename = filename + connection + f"{tag}"
+        filename = filename.replace(" ", "_")
+        whitelist = []
+        blacklist = []
 
+        if self.whitelist.count() > 0:
             string = f"SELECT DISTINCT gal FROM galleryinformation WHERE true "
             for type, list_ in white_list.items():
                 if len(list_) > 0:
@@ -2451,48 +2447,57 @@ class Ui_HentaiFoxDesktop(QMainWindow):
             result = c.fetchall()
             for tu in result:
                 whitelist.append(tu[0])
+        else:
+            c.execute(f"SELECT DISTINCT gal FROM galleryinformation WHERE true")
+            result = c.fetchall()
+            for tu in result:
+                whitelist.append(tu[0])
 
-            for type, list_ in black_list.items():
-                if len(list_) > 0:
-                    string = f"SELECT DISTINCT gal FROM galleryinformation WHERE true"
-                    for type, list_ in black_list.items():
-                        if len(list_) > 0:
-                            connection = " AND "
-                            for tag in black_list[type]:
-                                string = string + connection + f"gal IN (SELECT gal FROM gallery{type} WHERE tag='{tag}')"
-                                connection = " OR "
-                    print(string)
-                    c.execute(f"{string}")
-                    result = c.fetchall()
-                    for tu in result:
-                        blacklist.append(tu[0])
-                    break
+        for type, list_ in black_list.items():
+            if len(list_) > 0:
+                string = f"SELECT DISTINCT gal FROM galleryinformation WHERE true"
+                for type, list_ in black_list.items():
+                    if len(list_) > 0:
+                        connection = " AND "
+                        for tag in black_list[type]:
+                            string = string + connection + f"gal IN (SELECT gal FROM gallery{type} WHERE tag='{tag}')"
+                            connection = " OR "
+                c.execute(f"{string}")
+                result = c.fetchall()
+                for tu in result:
+                    blacklist.append(tu[0])
+                break
 
-            whitelist.sort()
-            blacklist.sort()
-            if len(blacklist) > 0:
-                results = list(set(whitelist) - set(blacklist))
-            else:
-                results = list(whitelist)
-            results.sort()
+        whitelist.sort()
+        blacklist.sort()
+        if len(blacklist) > 0:
+            results = list(set(whitelist) - set(blacklist))
+        else:
+            results = list(whitelist)
+        results.sort()
 
-            if len(results) > 0:
-                with open(f"Results (TXT)/{filename}.txt", "w+") as t:
-                    for gallery in results:
-                        t.write(f"https://hentaifox.com/gallery/{gallery}/\n")
-                with open(f"Results (JSON)/{filename}.result", "w") as j:
-                    data = []
-                    for gallery in results:
-                        data.append(gallery)
-                    json.dump(data, j, indent=4)
-                self.label.setText(
-                    f'Found {len(results)} galleries. You can find "{filename}.txt" in the "Results (TXT)" folder and "{filename}.result" in the "Results (JSON)" folder.')
-            else:
-                self.label.setText(f'Sorry no results for the combination {filename}.')
-            duration = time.time() - start_time
-            self.diagnostics.setText(
-                f"Search Diagnostics:\n\nGalleries found: {len(results)}\nDuration: {duration} seconds")
-            print(f"Multisearch finished | File: {filename}.txt/result")
+        if len(results) > 0:
+            c.execute(
+                f"SELECT * FROM galleryinformation WHERE gal IN {tuple(results)} ")
+            list_of_tuples = c.fetchall()
+            with open(f"Results (TXT)/{filename}.txt", "wb") as t:
+                item = ""
+                for tu in list_of_tuples:
+                    item += f"https://hentaifox.com/gallery/{tu[0]}/ | {tu[1]} \n"
+                t.write(item.encode("utf-8"))
+            with open(f"Results (JSON)/{filename}.result", "w") as j:
+                data = []
+                for gallery in results:
+                    data.append(gallery)
+                json.dump(data, j, indent=4)
+            self.label.setText(
+                f'Found {len(results)} galleries. You can find "{filename}.txt" in the "Results (TXT)" folder and "{filename}.result" in the "Results (JSON)" folder.')
+        else:
+            self.label.setText(f'Sorry no results for the combination {filename}.')
+        duration = time.time() - start_time
+        self.diagnostics.setText(
+            f"Search Diagnostics:\n\nGalleries found: {len(results)}\nDuration: {duration} seconds")
+        print(f"Multisearch finished | File: {filename}.txt/result")
 
     def internal_toggled(self):
         self.check_external.setChecked(False)
@@ -2765,7 +2770,7 @@ class Ui_HentaiFoxDesktop(QMainWindow):
         path = os.path.abspath("./Results (TXT)/")
         os.system(f'explorer {path}')
     #endregion
-#endregion
+# endregion
 # region-web-engine
 class RequestInterceptor(QWebEngineUrlRequestInterceptor):
     def interceptRequest(self, info):
@@ -2784,7 +2789,7 @@ class WebEngineView(QWebEngineView):
         new_webview = WebEngineView(self.tab)
         self.tab.create_new_tab(new_webview)
         return new_webview
-#endregion
+# endregion
 # region app.exec_
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
@@ -2797,4 +2802,4 @@ if __name__ == "__main__":
     ui.setupUi(HentaiFoxDesktop)
     HentaiFoxDesktop.show()
     sys.exit(app.exec_())
-#endregion
+# endregion
